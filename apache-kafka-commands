@@ -22,4 +22,66 @@
 # start a consumer
 >bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic test --from-beginning
 
+# multi-broker cluster - same machine configuration
+>cp config/server.properties config/server-1.properties
+>cp config/server.properties config/server-2.properties
+
+#config/server-1.properties:
+#    broker.id=1
+#    listeners=PLAINTEXT://:9093
+#    log.dirs=/tmp/kafka-logs-1
+
+#config/server-2.properties:
+#    broker.id=2
+#    listeners=PLAINTEXT://:9094
+#    log.dirs=/tmp/kafka-logs-2
+
+# start two new nodes
+>bin/kafka-server-start.sh config/server-1.properties &
+>bin/kafka-server-start.sh config/server-2.properties &
+
+# create a topic with a replication factor of three
+>bin/kafka-topics.sh --create --bootstrap-server localhost:9092 --replication-factor 3 --partitions 1 --topic my-test-replicated-topic
+
+# list topics
+>bin/kafka-topics.sh --list --bootstrap-server localhost:9092
+__consumer_offsets
+my-test-replicated-topic
+test
+
+# describe topic - isr - in-sync replicas
+>bin/kafka-topics.sh --describe --bootstrap-server localhost:9092 --topic my-test-replicated-topic
+Topic: my-test-replicated-topic	PartitionCount: 1	ReplicationFactor: 3	Configs: segment.bytes=1073741824
+	Topic: my-test-replicated-topic	Partition: 0	Leader: 0	Replicas: 0,1,2	Isr: 0,1,2
+
+# send some messages to the replicated topic
+>bin/kafka-console-producer.sh --broker-list localhost:9092 --topic my-replicated-test-topic
+>test message for replicated topic
+>test message for replicated topic 2
+
+# consumes messages from the topic
+>bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --from-beginning --topic my-replicated-test-topic
+
+# Kafka connector - import data by reading a file
+tunas-MacBook-Pro:kafka_2.12-2.4.1 tuna$ echo -e "test\ndata\nkafka" > test.txt
+tunas-MacBook-Pro:kafka_2.12-2.4.1 tuna$ ls
+LICENSE		bin		libs		site-docs
+NOTICE		config		logs		test.txt
+tunas-MacBook-Pro:kafka_2.12-2.4.1 tuna$
+
+>bin/connect-standalone.sh config/connect-standalone.properties config/connect-file-source.properties config/connect-file-sink.properties
+
+tunas-MacBook-Pro:kafka_2.12-2.4.1 tuna$ more test.sink.txt
+test
+data
+kafka
+
+tunas-MacBook-Pro:kafka_2.12-2.4.1 tuna$ bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic connect-test --from-beginning
+{"schema":{"type":"string","optional":false},"payload":"test"}
+{"schema":{"type":"string","optional":false},"payload":"data"}
+{"schema":{"type":"string","optional":false},"payload":"kafka"}
+
+tunas-MacBook-Pro:kafka_2.12-2.4.1 tuna$ echo Another line>> test.txt
+{"schema":{"type":"string","optional":false},"payload":"Another line"}
+
 
